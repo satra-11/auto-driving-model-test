@@ -21,14 +21,14 @@ help:
 	@echo "  extract       Extract features from raw images"
 	@echo "  train         Train the driving models"
 	@echo "  evaluate      Evaluate trained models"
-	@echo "  flocking      Run the flocking task"
+	@echo "  compare       Compare robustness (LTCN vs NODE)"
 	@echo ""
 	@echo "Tools:"
 	@echo "  mlflow        Start MLflow UI"
 	@echo ""
 	@echo "Utility:"
 	@echo "  clean         Remove cache files"
-	@echo "  all           Run full pipeline (extract → train)"
+	@echo "  all           Run full pipeline (train → evaluate)"
 
 # ============================================
 # Setup
@@ -68,12 +68,8 @@ train:
 evaluate:
 	python3 scripts/evaluate_driving.py --model ltcn --data-dir ./data/raw --model-path ./driving_results/LTCN_checkpoint.pth
 	python3 scripts/evaluate_driving.py --model node --data-dir ./data/raw --model-path ./driving_results/NODE_checkpoint.pth
-
-
-flocking:
-	uv run python -m src.flocking.run
-
-evaluate-corruption:
+	
+compare:
 	uv run python scripts/evaluate_corruption_robustness.py \
 		--data-dir ./data/raw \
 		--ltcn-model-path ./driving_results/LTCN_checkpoint.pth \

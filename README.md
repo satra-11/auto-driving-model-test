@@ -37,9 +37,12 @@ make help
 | Command | Description |
 |:---|:---|
 | `make install` | Install dependencies |
+| `make extract` | Extract features from raw data |
 | `make train` | Train the driving models |
 | `make evaluate` | Evaluate trained models |
-| `make all` | Run full pipeline (extract → train) |
+| `make compare` | Compare robustness (LTCN vs NODE) |
+| `make mlflow` | Start MLflow server |
+| `make all` | Run full pipeline (train → evaluate) |
 
 -----
 
