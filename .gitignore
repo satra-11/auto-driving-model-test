@@ -10,13 +10,19 @@ wheels/
 # venv
 .venv
 
+# cache files
+.mypy_cache
+.pytest_cache
+.ruff_cache
+
+
 # Others
 /tmp
 .vscode/
+.serena
+
 
 /data
 /driving_results
-/flocking_results
-/noise_robustness_results
 
 /mlruns
