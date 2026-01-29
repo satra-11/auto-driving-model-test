@@ -1,0 +1,22 @@
+# python generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.DS_Store
+
+# venv
+.venv
+
+# Others
+/tmp
+.vscode/
+
+/data
+/driving_results
+/flocking_results
+/noise_robustness_results
+
+/mlruns
