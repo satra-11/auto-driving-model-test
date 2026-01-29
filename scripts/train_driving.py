@@ -16,8 +16,8 @@ if __name__ == "__main__":
         "--model",
         type=str,
         required=True,
-        choices=["lgtcn", "ltcn", "node", "ngode"],
-        help="Model to train: lgtcn, ltcn, node, or ngode",
+        choices=["ltcn", "node"],
+        help="Model to train: ltcn or node",
     )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--num-sequences", type=int, default=800)
@@ -26,9 +26,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--hidden-dim", type=int, default=64)
-    parser.add_argument("--K", type=int, default=2)
     parser.add_argument("--num-layers-ltcn", type=int, default=4)
-    parser.add_argument("--num-layers-cfgcn", type=int, default=1)
     parser.add_argument("--corruption-rate", type=float, default=0.2)
     parser.add_argument("--data-dir", type=str, default="./data/raw")
     parser.add_argument("--processed-dir", type=str, default="./data/processed")

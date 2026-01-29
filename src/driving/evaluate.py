@@ -8,10 +8,8 @@ import numpy as np
 import torch
 
 from src.core.models import (
-    CfGCNController,
     LTCNController,
     NeuralODEController,
-    NeuralGraphODEController,
 )
 from src.driving.data import setup_dataloaders
 from src.driving.engine import evaluate_model
@@ -51,16 +49,7 @@ def run_single_model_evaluation(args: argparse.Namespace):
 
         # モデル作成
         print(f"Creating {args.model.upper()} model...")
-        if args.model == "lgtcn":
-            model = CfGCNController(
-                frame_height=64,
-                frame_width=64,
-                hidden_dim=args.hidden_dim,
-                output_dim=6,
-                K=args.K,
-                num_layers=args.num_layers_cfgcn,
-            )
-        elif args.model == "ltcn":
+        if args.model == "ltcn":
             model = LTCNController(
                 frame_height=64,
                 frame_width=64,
@@ -74,15 +63,6 @@ def run_single_model_evaluation(args: argparse.Namespace):
                 frame_width=64,
                 hidden_dim=args.hidden_dim,
                 output_dim=6,
-            )
-        elif args.model == "ngode":
-            model = NeuralGraphODEController(
-                frame_height=64,
-                frame_width=64,
-                hidden_dim=args.hidden_dim,
-                output_dim=6,
-                K=args.K,
-                num_layers=args.num_layers_cfgcn,
             )
         else:
             raise ValueError(f"Unknown model type: {args.model}")

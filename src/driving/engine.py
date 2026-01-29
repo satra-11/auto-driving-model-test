@@ -9,19 +9,14 @@ from tqdm import tqdm
 import mlflow
 
 from src.core.models import (
-    CfGCNController,
     LTCNController,
     NeuralODEController,
-    NeuralGraphODEController,
 )
-from src.tasks import NetworkComparator
 
 
 def train_model(
     model: LTCNController
-    | CfGCNController
-    | NeuralODEController
-    | NeuralGraphODEController,
+    | NeuralODEController,
     model_name: str,
     train_loader: DataLoader,
     val_loader: DataLoader,
@@ -131,9 +126,7 @@ def train_model(
 
 def evaluate_model(
     model: LTCNController
-    | CfGCNController
-    | NeuralODEController
-    | NeuralGraphODEController,
+    | NeuralODEController,
     model_name: str,
     test_data: dict,
     device: torch.device,
@@ -201,28 +194,4 @@ def evaluate_model(
     return results
 
 
-def evaluate_networks(
-    lgtcn_model: CfGCNController,
-    ltcn_model: LTCNController,
-    test_data: dict,
-    device: torch.device,
-):
-    """LGTCNとLTCNを比較評価"""
-    comparator = NetworkComparator(device)
 
-    # テストデータ準備
-    test_dict = {
-        "clean_frames": test_data["clean_frames"],
-        "sensors": test_data["sensors"],
-        "adjacency": None,
-    }
-
-    print("Comparing LGTCN and LTCN...")
-    results = comparator.compare_networks(
-        lgtcn_model,
-        ltcn_model,
-        test_dict,
-        corruption_levels=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5],
-    )
-
-    return results

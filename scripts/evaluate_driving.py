@@ -33,8 +33,8 @@ if __name__ == "__main__":
         "--model",
         type=str,
         required=True,
-        choices=["lgtcn", "ltcn", "node", "ngode"],
-        help="Model type to evaluate (lgtcn, ltcn, node, ngode)",
+        choices=["ltcn", "node"],
+        help="Model type to evaluate (ltcn, node)",
     )
     parser.add_argument(
         "--model-path",
@@ -45,9 +45,7 @@ if __name__ == "__main__":
 
     # Model params (defaults matched to train_driving.py)
     parser.add_argument("--hidden-dim", type=int, default=64)
-    parser.add_argument("--K", type=int, default=2)
     parser.add_argument("--num-layers-ltcn", type=int, default=4)
-    parser.add_argument("--num-layers-cfgcn", type=int, default=1)
     parser.add_argument("--sequence-length", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=32)
 

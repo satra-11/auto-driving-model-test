@@ -10,10 +10,8 @@ import mlflow.pytorch
 
 
 from src.core.models import (
-    CfGCNController,
     LTCNController,
     NeuralODEController,
-    NeuralGraphODEController,
 )
 from src.driving.data import setup_dataloaders
 from src.driving.engine import train_model
@@ -21,16 +19,7 @@ from src.driving.engine import train_model
 
 def create_model(model_type: str, args: argparse.Namespace):
     """指定されたタイプのモデルを作成"""
-    if model_type == "lgtcn":
-        return CfGCNController(
-            frame_height=64,
-            frame_width=64,
-            hidden_dim=args.hidden_dim,
-            output_dim=6,
-            K=args.K,
-            num_layers=args.num_layers_cfgcn,
-        )
-    elif model_type == "ltcn":
+    if model_type == "ltcn":
         return LTCNController(
             frame_height=64,
             frame_width=64,
@@ -45,74 +34,13 @@ def create_model(model_type: str, args: argparse.Namespace):
             hidden_dim=args.hidden_dim,
             output_dim=6,
         )
-    elif model_type == "ngode":
-        return NeuralGraphODEController(
-            frame_height=64,
-            frame_width=64,
-            hidden_dim=args.hidden_dim,
-            output_dim=6,
-            K=args.K,
-            num_layers=args.num_layers_cfgcn,
-        )
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
 
 def create_optimizer_and_scheduler(model, model_type: str, args: argparse.Namespace):
     """モデルタイプに応じたオプティマイザとスケジューラを作成"""
-    if model_type == "lgtcn":
-        # LGTCNはパラメータグループごとに異なる学習率を設定
-        param_groups = [
-            {
-                "params": model.feature_extractor.parameters(),
-                "lr": args.lr * 0.1,
-            },
-            {
-                "params": model.node_encoder.parameters(),
-                "lr": args.lr * 0.1,
-            },
-            {
-                "params": model.temporal_processor.parameters(),
-                "lr": args.lr,
-            },
-            {
-                "params": model.control_decoder.parameters(),
-                "lr": args.lr,
-            },
-            {
-                "params": [model.output_scale, model.output_bias],
-                "lr": args.lr,
-            },
-        ]
-        optimizer = optim.Adam(param_groups, weight_decay=1e-4)
-    elif model_type == "ngode":
-        # NGODEもLGTCN同様のパラメータグループを設定
-        param_groups = [
-            {
-                "params": model.feature_extractor.parameters(),
-                "lr": args.lr * 0.1,
-            },
-            {
-                "params": model.node_encoder.parameters(),
-                "lr": args.lr * 0.1,
-            },
-            {
-                "params": model.temporal_processor.parameters(),
-                "lr": args.lr,
-            },
-            {
-                "params": model.control_decoder.parameters(),
-                "lr": args.lr,
-            },
-            {
-                "params": [model.output_scale, model.output_bias],
-                "lr": args.lr,
-            },
-        ]
-        optimizer = optim.Adam(param_groups, weight_decay=1e-4)
-    else:
-        # LTCN, NODE は標準の設定
-        optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
     scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
     return optimizer, scheduler
@@ -120,17 +48,10 @@ def create_optimizer_and_scheduler(model, model_type: str, args: argparse.Namesp
 
 def get_training_config(model_type: str) -> dict:
     """モデルタイプに応じた訓練設定を取得"""
-    if model_type in ["lgtcn", "ngode"]:
-        return {
-            "use_full_sequence_loss": True,
-            "gradient_clip_norm": 5.0,
-        }
-    else:
-        # ltcn, node も全シーケンスでLossを計算（評価時と統一）
-        return {
-            "use_full_sequence_loss": True,
-            "gradient_clip_norm": 1.0,
-        }
+    return {
+        "use_full_sequence_loss": True,
+        "gradient_clip_norm": 1.0,
+    }
 
 
 def run_training(args: argparse.Namespace):
