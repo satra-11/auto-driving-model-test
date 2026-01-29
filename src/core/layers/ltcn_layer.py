@@ -148,8 +148,9 @@ class LTCNLayer(nn.Module):
                 -1
             )  # (..., B, k)
 
-            dydt = -y * decay + out_term + recurr_term  # (..., B, k)
-            y = y + dt * dydt
+            # semi-implicit Euler integration
+            drive = out_term + recurr_term
+            y = (y + dt * drive) / (1.0 + dt * decay)
 
             if self.clamp_output:
                 lim = (
