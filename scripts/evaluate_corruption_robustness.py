@@ -28,23 +28,21 @@ from src.utils import (
 
 
 class CorruptionRobustnessEvaluator:
-    """LTCNとNeural ODEの外乱耐性評価クラス"""
+    """外乱耐性評価クラス"""
 
     def __init__(self, device: torch.device = None):
         self.device = device or torch.device("cpu")
 
     def evaluate_robustness(
         self,
-        ltcn_model: nn.Module,
-        node_model: nn.Module,
+        models: dict[str, nn.Module],
         test_data: dict[str, torch.Tensor],
         levels: list[float],
         corruption_type: str = "noise",
     ) -> dict[str, Any]:
         """比較評価を実行"""
         results: dict[str, Any] = {
-            "ltcn": {},
-            "node": {},
+            "models": {},
             "comparison": {},
             "metadata": {"corruption_type": corruption_type},
         }
@@ -60,20 +58,19 @@ class CorruptionRobustnessEvaluator:
                 clean_frames, level, corruption_type
             )
 
-            # LTCNテスト
-            ltcn_metrics = self._evaluate_model(
-                ltcn_model, clean_frames, corrupted_frames, sensors
-            )
-            results["ltcn"][f"level_{level}"] = ltcn_metrics
+            # 各モデルのテスト
+            for name, model in models.items():
+                if name not in results["models"]:
+                    results["models"][name] = {}
+                
+                metrics = self._evaluate_model(
+                    model, clean_frames, corrupted_frames, sensors
+                )
+                results["models"][name][f"level_{level}"] = metrics
 
-            # Neural ODEテスト
-            node_metrics = self._evaluate_model(
-                node_model, clean_frames, corrupted_frames, sensors
-            )
-            results["node"][f"level_{level}"] = node_metrics
-
-        # 比較サマリー
-        results["comparison"] = self._generate_comparison_summary(results)
+        # 比較サマリー (2モデル以上ある場合のみ)
+        if len(models) > 1:
+            results["comparison"] = self._generate_comparison_summary(results)
 
         return results
 
@@ -93,10 +90,7 @@ class CorruptionRobustnessEvaluator:
         elif corruption_type == "tunnel":
             # Level 3: Tunnel Exit (level = peak_intensity)
             # シーケンス全体に対して処理を行うため、stackではなく直接渡す
-            # frames expected shape: [Batch, T, H, W, C] but check input
-            # Setup inputs are likely [Batch, T, H, W, C]
-            # simulate_tunnel_exit takes [T, H, W, C]. We need to apply per batch item.
-
+            
             corrupted_batch = []
             for i in range(frames.shape[0]):
                 # 個別のシーケンス [T, H, W, C]
@@ -156,36 +150,41 @@ class CorruptionRobustnessEvaluator:
             "robustness_score": {},
         }
 
+        # 比較は results["models"] の中の最初の2つで行う（現状の実装では）
+        model_names = list(results["models"].keys())
+        if len(model_names) < 2:
+            return {}
+        
+        m1, m2 = model_names[0], model_names[1]
+
         metrics = ["control_mse", "control_mae", "output_variance"]
 
         for metric in metrics:
-            ltcn_values = []
-            node_values = []
+            m1_values = []
+            m2_values = []
 
-            for key in results["ltcn"]:
+            for key in results["models"][m1]:
                 if key.startswith("level_"):
-                    ltcn_val = results["ltcn"][key][metric]
-                    node_val = results["node"][key][metric]
-                    ltcn_values.append(ltcn_val)
-                    node_values.append(node_val)
+                    m1_val = results["models"][m1][key][metric]
+                    m2_val = results["models"][m2][key][metric]
+                    m1_values.append(m1_val)
+                    m2_values.append(m2_val)
 
-            ltcn_avg = float(np.mean(ltcn_values))
-            node_avg = float(np.mean(node_values))
+            m1_avg = float(np.mean(m1_values))
+            m2_avg = float(np.mean(m2_values))
 
-            winner = "LTCN" if ltcn_avg < node_avg else "Neural ODE"
+            winner = m1 if m1_avg < m2_avg else m2
 
             summary["winner_by_metric"][metric] = {
                 "winner": winner,
-                "ltcn_avg": ltcn_avg,
-                "node_avg": node_avg,
-                "diff": float(ltcn_avg - node_avg),
+                f"{m1}_avg": m1_avg,
+                f"{m2}_avg": m2_avg,
+                "diff": float(abs(m1_avg - m2_avg)),
             }
 
         # ロバスト性スコア (Slope)
-        for model_name, model_results in [
-            ("ltcn", results["ltcn"]),
-            ("node", results["node"]),
-        ]:
+        for model_name in model_names:
+            model_results = results["models"][model_name]
             levels = []
             mse_values = []
             for key in sorted(model_results.keys()):
@@ -204,12 +203,19 @@ class CorruptionRobustnessEvaluator:
         self, results: dict[str, Any], save_path: Path | None = None
     ):
         """比較結果を可視化"""
-        fig, axes = plt.subplots(1, 3, figsize=(18, 5))
-        axes = axes.flatten()
+        num_cols = 3
+        fig, axes = plt.subplots(1, num_cols, figsize=(18, 5))
+        if num_cols == 1:
+            axes = [axes]
+        else:
+            axes = axes.flatten()
 
         c_type = results["metadata"]["corruption_type"]
+        
+        # Determine levels from the first model found
+        first_model = list(results["models"].keys())[0]
         levels = [
-            float(k.split("_")[1]) for k in results["ltcn"] if k.startswith("level_")
+            float(k.split("_")[1]) for k in results["models"][first_model] if k.startswith("level_")
         ]
         levels.sort()
 
@@ -219,12 +225,15 @@ class CorruptionRobustnessEvaluator:
             ("output_variance", f"Variance vs {c_type}"),
         ]
 
-        for i, (metric, title) in enumerate(metrics_to_plot):
-            ltcn_vals = [results["ltcn"][f"level_{lvl}"][metric] for lvl in levels]
-            node_vals = [results["node"][f"level_{lvl}"][metric] for lvl in levels]
+        # Plot for each model
+        styles = ["b-o", "r-s", "g-^", "y-d"] # Support up to 4 models distinctively
 
-            axes[i].plot(levels, ltcn_vals, "b-o", label="LTCN", linewidth=2)
-            axes[i].plot(levels, node_vals, "r-s", label="Neural ODE", linewidth=2)
+        for i, (metric, title) in enumerate(metrics_to_plot):
+            for idx, (name, model_results) in enumerate(results["models"].items()):
+                vals = [model_results[f"level_{lvl}"][metric] for lvl in levels]
+                style = styles[idx % len(styles)]
+                axes[i].plot(levels, vals, style, label=name, linewidth=2)
+            
             axes[i].set_xlabel("Severity Level")
             axes[i].set_ylabel(metric)
             axes[i].set_title(title)
@@ -266,43 +275,67 @@ def run_corruption_robustness_evaluation(args: argparse.Namespace):
             processed_dir=args.processed_dir,
         )
 
-        # Models
-        print("Creating models...")
-        ltcn_model = LTCNController(
-            frame_height=64,
-            frame_width=64,
-            output_dim=6,
-            hidden_dim=args.hidden_dim,
-            num_layers=args.num_layers_ltcn,
-        )
-        node_model = NeuralODEController(
-            frame_height=64,
-            frame_width=64,
-            output_dim=6,
-            hidden_dim=args.hidden_dim,
-            num_hidden_layers=args.num_hidden_layers_node,
-        )
+        # Model Selection
+        models = {}
+        model_names = args.model_type
+        
+        # Check if single specific path is provided but multiple models requested
+        if len(model_names) > 1 and args.model_path is not None:
+             print("Warning: --model-path provided but multiple models are selected. Ignoring custom path and using defaults.")
 
-        # Load Weights
-        for model, path, name in [
-            (ltcn_model, args.ltcn_model_path, "LTCN"),
-            (node_model, args.node_model_path, "Neural ODE"),
-        ]:
-            model_obj: nn.Module = model
-            print(f"Loading {name} from {path}")
-            ckpt = torch.load(path, map_location=device)
-            state_dict = (
-                ckpt["model_state_dict"] if "model_state_dict" in ckpt else ckpt
-            )
+        for model_name in model_names:
+            # Set default path if not provided or valid
+            if args.model_path is None or len(model_names) > 1:
+                if model_name == "ltcn":
+                    model_path = "./driving_results/LTCN_checkpoint.pth"
+                elif model_name == "node":
+                    model_path = "./driving_results/NODE_checkpoint.pth"
+            else:
+                model_path = args.model_path
+
+            print(f"Initializing {model_name.upper()} model...")
+            
+            if model_name == "ltcn":
+                model = LTCNController(
+                    frame_height=64,
+                    frame_width=64,
+                    output_dim=6,
+                    hidden_dim=args.hidden_dim,
+                    num_layers=args.num_layers_ltcn,
+                )
+            elif model_name == "node":
+                model = NeuralODEController(
+                    frame_height=64,
+                    frame_width=64,
+                    output_dim=6,
+                    hidden_dim=args.hidden_dim,
+                    num_hidden_layers=args.num_hidden_layers_node,
+                )
+            
+            # Load Weights
+            print(f"Loading {model_name} from {model_path}")
             try:
-                model_obj.load_state_dict(state_dict)
+                ckpt = torch.load(model_path, map_location=device)
+                state_dict = (
+                    ckpt["model_state_dict"] if "model_state_dict" in ckpt else ckpt
+                )
+                model.load_state_dict(state_dict)
             except Exception as e:
-                print(f"Error loading {name}: {e}")
+                print(f"Error loading {model_name}: {e}")
                 # Try raw load if state dict fails matching
-                model_obj = torch.load(path, map_location=device)
+                try:
+                    model = torch.load(model_path, map_location=device)
+                except Exception as e2:
+                    print(f"Failed to load {model_name} from {model_path}. Skipping. Error: {e2}")
+                    continue
 
-            model_obj.eval()
-            model_obj.to(device)
+            model.eval()
+            model.to(device)
+            models[model_name] = model
+
+        if not models:
+            print("No models loaded. Exiting.")
+            return
 
         # Get Test Batch
         batch = next(iter(test_loader))
@@ -315,12 +348,14 @@ def run_corruption_robustness_evaluation(args: argparse.Namespace):
         # Run Eval
         evaluator = CorruptionRobustnessEvaluator(device)
         results = evaluator.evaluate_robustness(
-            ltcn_model, node_model, test_data, levels, args.corruption_type
+            models, test_data, levels, args.corruption_type
         )
 
         # Save
-        r_path = save_dir / f"robustness_{args.corruption_type}.json"
-        p_path = save_dir / f"robustness_{args.corruption_type}.png"
+        # Make filename reflect models used
+        names_str = "_".join(sorted(models.keys()))
+        r_path = save_dir / f"robustness_{args.corruption_type}_{names_str}.json"
+        p_path = save_dir / f"robustness_{args.corruption_type}_{names_str}.png"
 
         with open(r_path, "w") as f:
             json.dump(results, f, indent=2)
@@ -335,12 +370,15 @@ def run_corruption_robustness_evaluation(args: argparse.Namespace):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate corruption robustness")
-    parser.add_argument("--data-dir", required=True)
+    
+    # Required or Core Args
+    parser.add_argument("--model-type", required=True, nargs='+', choices=["ltcn", "node"], help="Model type(s) to evaluate")
+    parser.add_argument("--data-dir", default="./data/raw", help="Path to raw data directory")
+    
+    # Optional Args
+    parser.add_argument("--model-path", default=None, help="Path to model checkpoint (optional, defaults based on model-type. Ignored if multiple models)")
     parser.add_argument("--processed-dir", default=None)
     parser.add_argument("--save-dir", default="./corruption_results")
-
-    parser.add_argument("--ltcn-model-path", required=True)
-    parser.add_argument("--node-model-path", required=True)
 
     parser.add_argument("--hidden-dim", type=int, default=64)
     parser.add_argument("--num-layers-ltcn", type=int, default=4)
