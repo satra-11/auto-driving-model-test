@@ -1,7 +1,7 @@
 # ============================================
 # Makefile for LGTCN Project
 # ============================================
-
+PYTHON := $(shell command -v uv > /dev/null 2>&1 && echo "uv run python" || echo "python3")
 .PHONY: help install install-dev sync lint test mlflow clean extract train evaluate all
 
 # デフォルトはヘルプを表示
@@ -59,18 +59,18 @@ test:
 # ============================================
 
 extract:
-	uv run python scripts/extract_features.py
+	$(PYTHON) scripts/extract_features.py
 
 train:
-	python3 scripts/train_driving.py --model ltcn
-	python3 scripts/train_driving.py --model node
+	$(PYTHON) scripts/train_driving.py --model ltcn
+	$(PYTHON) scripts/train_driving.py --model node
 
 evaluate:
-	python3 scripts/evaluate_driving.py --model ltcn --data-dir ./data/raw --model-path ./driving_results/LTCN_checkpoint.pth
-	python3 scripts/evaluate_driving.py --model node --data-dir ./data/raw --model-path ./driving_results/NODE_checkpoint.pth
+	$(PYTHON) scripts/evaluate_driving.py --model ltcn --data-dir ./data/raw --model-path ./driving_results/LTCN_checkpoint.pth
+	$(PYTHON) scripts/evaluate_driving.py --model node --data-dir ./data/raw --model-path ./driving_results/NODE_checkpoint.pth
 	
 compare:
-	uv run python scripts/evaluate_corruption_robustness.py \
+	$(PYTHON) scripts/evaluate_corruption_robustness.py \
 		--data-dir ./data/raw \
 		--ltcn-model-path ./driving_results/LTCN_checkpoint.pth \
 		--node-model-path ./driving_results/NODE_checkpoint.pth \
