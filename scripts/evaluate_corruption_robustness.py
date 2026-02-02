@@ -22,8 +22,7 @@ from src.driving.data import setup_dataloaders
 from src.utils import (
     add_gaussian_noise,
     add_static_bias,
-    add_overexposure,
-    simulate_tunnel_exit,
+    add_overexposure
 )
 
 
@@ -87,24 +86,6 @@ class CorruptionRobustnessEvaluator:
         elif corruption_type == "overexposure":
             # Level 2: Contrast/Overexposure (level = factor)
             return torch.stack([add_overexposure(f, factor=level) for f in frames])
-        elif corruption_type == "tunnel":
-            # Level 3: Tunnel Exit (level = peak_intensity)
-            # シーケンス全体に対して処理を行うため、stackではなく直接渡す
-            
-            corrupted_batch = []
-            for i in range(frames.shape[0]):
-                # 個別のシーケンス [T, H, W, C]
-                seq = frames[i]
-                # トンネル出口の位置をシーケンスの真ん中あたりに設定
-                exit_idx = seq.shape[0] // 2
-                corrupted_seq = simulate_tunnel_exit(
-                    seq, exit_idx=exit_idx, peak_intensity=level, transition_duration=5
-                )
-                corrupted_batch.append(corrupted_seq)
-            return torch.stack(corrupted_batch)
-
-        else:
-            raise ValueError(f"Unknown corruption type: {corruption_type}")
 
     def _evaluate_model(
         self,
@@ -393,7 +374,7 @@ if __name__ == "__main__":
     # Corruption Params
     parser.add_argument(
         "--corruption-type",
-        choices=["noise", "bias", "overexposure", "tunnel"],
+        choices=["noise", "bias", "overexposure"],
         default="noise",
         help="Type of corruption to apply",
     )
