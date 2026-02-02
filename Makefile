@@ -66,16 +66,10 @@ train:
 	$(PYTHON) scripts/train_driving.py --model node
 
 evaluate:
-	$(PYTHON) scripts/evaluate_driving.py --model ltcn --data-dir ./data/raw --model-path ./driving_results/LTCN_checkpoint.pth
-	$(PYTHON) scripts/evaluate_driving.py --model node --data-dir ./data/raw --model-path ./driving_results/NODE_checkpoint.pth
-	
-compare:
-	$(PYTHON) scripts/evaluate_corruption_robustness.py \
-		--data-dir ./data/raw \
-		--ltcn-model-path ./driving_results/LTCN_checkpoint.pth \
-		--node-model-path ./driving_results/NODE_checkpoint.pth \
-		--corruption-type bias \
-		--levels 0.0,0.1,0.2,0.3
+	$(PYTHON) scripts/evaluate_corruption_robustness.py --model-type ltcn node --corruption-type noise   --levels 0.1,0.2,0.3,0.4,0.5
+	$(PYTHON) scripts/evaluate_corruption_robustness.py --model-type ltcn node --corruption-type overexposure --levels 0.1,0.2,0.3,0.4,0.5
+
+
 
 # ============================================
 # Tools
