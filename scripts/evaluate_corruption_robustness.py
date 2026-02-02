@@ -73,19 +73,45 @@ class CorruptionRobustnessEvaluator:
 
         return results
 
+    # ImageNet stats
+    IMAGENET_MEAN = [0.485, 0.456, 0.406]
+    IMAGENET_STD = [0.229, 0.224, 0.225]
+
+    def _denormalize(self, frames: torch.Tensor) -> torch.Tensor:
+        """正規化されたTensor (B, T, C, H, W) を [0, 1] に戻す"""
+        # frames: [B, T, C, H, W]
+        mean = torch.tensor(self.IMAGENET_MEAN, device=self.device).view(1, 1, 3, 1, 1)
+        std = torch.tensor(self.IMAGENET_STD, device=self.device).view(1, 1, 3, 1, 1)
+        return frames * std + mean
+
+    def _normalize(self, frames: torch.Tensor) -> torch.Tensor:
+        """[0, 1] のTensor (B, T, C, H, W) を正規化する"""
+        mean = torch.tensor(self.IMAGENET_MEAN, device=self.device).view(1, 1, 3, 1, 1)
+        std = torch.tensor(self.IMAGENET_STD, device=self.device).view(1, 1, 3, 1, 1)
+        return (frames - mean) / std
+
     def _apply_corruption(
         self, frames: torch.Tensor, level: float, corruption_type: str
     ) -> torch.Tensor:
-        """フレームに外乱を適用"""
+        """フレームに外乱を適用 (正規化 -> [0,1] -> ノイズ -> 正規化)"""
+        # 1. Denormalize to [0, 1]
+        frames_01 = self._denormalize(frames)
+
+        # 2. Apply Corruption
         if corruption_type == "noise":
             # ガウシアンノイズ (level = std)
-            return torch.stack([add_gaussian_noise(f, std=level) for f in frames])
+            corrupted = torch.stack([add_gaussian_noise(f, std=level) for f in frames_01])
         elif corruption_type == "bias":
             # Level 1: Static Bias (level = bias value)
-            return torch.stack([add_static_bias(f, bias=level) for f in frames])
+            corrupted = torch.stack([add_static_bias(f, bias=level) for f in frames_01])
         elif corruption_type == "overexposure":
             # Level 2: Contrast/Overexposure (level = factor)
-            return torch.stack([add_overexposure(f, factor=level) for f in frames])
+            corrupted = torch.stack([add_overexposure(f, factor=level) for f in frames_01])
+        else:
+            corrupted = frames_01
+
+        # 3. Re-normalize
+        return self._normalize(corrupted)
 
     def _evaluate_model(
         self,
