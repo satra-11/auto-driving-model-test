@@ -99,7 +99,7 @@ class NeuralODEController(nn.Module):
 
             # Neural ODE integration
             next_hidden = self.temporal_processor(
-                current_hidden, x_t, dt=0.1, n_steps=1
+                current_hidden, x_t, dt=0.1
             )
 
             # Decode control signal

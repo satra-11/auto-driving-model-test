@@ -65,7 +65,6 @@ class NeuralODELayer(nn.Module):
         y: torch.Tensor,
         u_t: torch.Tensor | None,
         dt: float = 0.1,
-        n_steps: int = 1,
     ) -> torch.Tensor:
         """Integrate the ODE using Euler method.
 
@@ -73,7 +72,6 @@ class NeuralODELayer(nn.Module):
             y: Current hidden state (..., hidden_dim)
             u_t: Input at current time (..., in_dim), can be None
             dt: Time step size
-            n_steps: Number of Euler integration steps
 
         Returns:
             Next hidden state (..., hidden_dim)
@@ -82,10 +80,9 @@ class NeuralODELayer(nn.Module):
             u_proj = self.input_proj(u_t)
 
         # Euler integration: y_{n+1} = y_n + dt * (f(y_n) + u_proj)
-        for _ in range(n_steps):
-            dydt = self.ode_func(y)
-            if u_t is not None:
-                dydt = dydt + u_proj
-            y = y + dt * dydt
+        dydt = self.ode_func(y)
+        if u_t is not None:
+            dydt = dydt + u_proj
+        y = y + dt * dydt
 
         return y
