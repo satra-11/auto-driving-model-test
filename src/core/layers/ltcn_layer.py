@@ -54,7 +54,6 @@ class LTCNLayer(nn.Module):
         y: torch.Tensor,  # (..., N)
         u_t: torch.Tensor | None,  # (..., in_dim)  (required for block 0 each step)
         dt: float = 5e-2,
-        n_steps: int = 1,
     ) -> torch.Tensor:
         assert y.shape[-1] == self.N
         if u_t is not None:
@@ -65,52 +64,51 @@ class LTCNLayer(nn.Module):
         B, k = self.num_blocks, self.k
         y = y.view(*batch, B, k)
 
-        for _ in range(n_steps):
-            # tau positive
-            tau = F.softplus(self._tau_raw) + self.tau_eps  # shape (N,)
-            tau = tau.view(B, k)
-            if len(batch) > 0:
-                tau = tau.view(*([1] * len(batch)), B, k).expand(*batch, B, k)
+        # tau positive
+        tau = F.softplus(self._tau_raw) + self.tau_eps  # shape (N,)
+        tau = tau.view(B, k)
+        if len(batch) > 0:
+            tau = tau.view(*([1] * len(batch)), B, k).expand(*batch, B, k)
 
-            # ---- net_out per block
-            net_out_list = []
-            # block 0 from input
-            if u_t is None:
-                net0 = torch.zeros(*batch, k, device=y.device, dtype=y.dtype)
-            else:
-                net0 = torch.tanh(self.W_in(u_t))
-            net_out_list.append(net0)
+        # ---- net_out per block
+        net_out_list = []
+        # block 0 from input
+        if u_t is None:
+            net0 = torch.zeros(*batch, k, device=y.device, dtype=y.dtype)
+        else:
+            net0 = torch.tanh(self.W_in(u_t))
+        net_out_list.append(net0)
 
-            # blocks 1..B-1 from previous block state
-            for j in range(1, B):
-                prev = y[..., j - 1, :]  # (..., k)
-                net_j = torch.tanh(self.W_fwd[j - 1](prev))
-                net_out_list.append(net_j)
-            net_out = torch.stack(net_out_list, dim=-2)  # (..., B, k)
+        # blocks 1..B-1 from previous block state
+        for j in range(1, B):
+            prev = y[..., j - 1, :]  # (..., k)
+            net_j = torch.tanh(self.W_fwd[j - 1](prev))
+            net_out_list.append(net_j)
+        net_out = torch.stack(net_out_list, dim=-2)  # (..., B, k)
 
-            # ---- net_recurr per block (from same block state)
-            net_recurr_list = []
-            for j in range(B):
-                cur = y[..., j, :]  # (..., k)
-                net_r = torch.tanh(self.W_rec[j](cur))
-                net_recurr_list.append(net_r)
-            net_recurr = torch.stack(net_recurr_list, dim=-2)  # (..., B, k)
+        # ---- net_recurr per block (from same block state)
+        net_recurr_list = []
+        for j in range(B):
+            cur = y[..., j, :]  # (..., k)
+            net_r = torch.tanh(self.W_rec[j](cur))
+            net_recurr_list.append(net_r)
+        net_recurr = torch.stack(net_recurr_list, dim=-2)  # (..., B, k)
 
-            # ---- decay term: (1/tau) + |net_out| + |net_recurr|
-            decay = (1.0 / tau) + net_out.abs() + net_recurr.abs()  # (..., B, k)
+        # ---- decay term: (1/tau) + |net_out| + |net_recurr|
+        decay = (1.0 / tau) + net_out.abs() + net_recurr.abs()  # (..., B, k)
 
-            # ---- E-lin combinations: (E_l[j] @ net_out_j) and (E_l_r[j] @ net_recurr_j)
-            # reshape for bmm: (..., B, k, k) @ (..., B, k, 1) -> (..., B, k, 1)
-            E = self.E_l.view(*([1] * len(batch)), B, k, k).expand(*batch, B, k, k)
-            Er = self.E_l_r.view(*([1] * len(batch)), B, k, k).expand(*batch, B, k, k)
+        # ---- E-lin combinations: (E_l[j] @ net_out_j) and (E_l_r[j] @ net_recurr_j)
+        # reshape for bmm: (..., B, k, k) @ (..., B, k, 1) -> (..., B, k, 1)
+        E = self.E_l.view(*([1] * len(batch)), B, k, k).expand(*batch, B, k, k)
+        Er = self.E_l_r.view(*([1] * len(batch)), B, k, k).expand(*batch, B, k, k)
 
-            out_term = torch.matmul(E, net_out.unsqueeze(-1)).squeeze(-1)  # (..., B, k)
-            recurr_term = torch.matmul(Er, net_recurr.unsqueeze(-1)).squeeze(
-                -1
-            )  # (..., B, k)
+        out_term = torch.matmul(E, net_out.unsqueeze(-1)).squeeze(-1)  # (..., B, k)
+        recurr_term = torch.matmul(Er, net_recurr.unsqueeze(-1)).squeeze(
+            -1
+        )  # (..., B, k)
 
-            # semi-implicit Euler integration
-            drive = out_term + recurr_term
-            y = (y + dt * drive) / (1.0 + dt * decay)
+        # semi-implicit Euler integration
+        drive = out_term + recurr_term
+        y = (y + dt * drive) / (1.0 + dt * decay)
 
         return y.view(*batch, B * k)

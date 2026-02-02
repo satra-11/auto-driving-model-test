@@ -77,7 +77,7 @@ class LTCNController(nn.Module):
         for t in range(T):
             x_t = node_feats[:, t].mean(dim=1)
             next_hidden = self.temporal_processor(
-                current_hidden, x_t, dt=0.1, n_steps=1
+                current_hidden, x_t, dt=0.1
             )
 
             control = self.control_decoder(next_hidden)
